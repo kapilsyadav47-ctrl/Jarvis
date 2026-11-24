@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>JARVIS AI Assistant</title>
+<style>
+:root{color-scheme:dark;--cyan:#00eaff;--panel:#071a2b}
+*{box-sizing:border-box}
+body{margin:0;background:radial-gradient(circle at 50% 25%,#0b2940,#020812 65%);color:#d9fbff;font-family:Arial,sans-serif;min-height:100vh}
+header{text-align:center;padding:22px 12px 8px;color:var(--cyan);font-size:clamp(25px,5vw,38px);letter-spacing:7px;text-shadow:0 0 18px #00cfff}
+#clock{text-align:center;color:#8ddce8;margin:8px}
+main{max-width:850px;margin:auto;padding:12px}
+.hud{display:grid;place-items:center;padding:14px}
+.orb{width:170px;height:170px;border:3px solid var(--cyan);border-radius:50%;display:grid;place-items:center;box-shadow:0 0 28px #00bfff,inset 0 0 25px #00bfff;animation:pulse 2.4s infinite alternate}
+.core{width:68px;height:68px;border-radius:50%;background:var(--cyan);box-shadow:0 0 35px var(--cyan)}
+@keyframes pulse{to{transform:scale(1.045);box-shadow:0 0 48px #00bfff,inset 0 0 34px #00bfff}}
+#status{text-align:center;color:#7defff;font-size:13px;letter-spacing:2px;margin:8px}
+#chat{height: min(42vh,390px);min-height:220px;overflow:auto;background:#041321cc;border:1px solid #087d96;border-radius:14px;padding:14px}
+.msg{padding:11px 13px;margin:9px 0;border-radius:12px;line-height:1.5;white-space:pre-wrap;overflow-wrap:anywhere}
+.user{background:#10334a;margin-left:12%;text-align:right}
+.assistant{background:#082633;margin-right:12%;border:1px solid #07566a}
+.controls{display:flex;gap:8px;margin-top:12px}
+input{min-width:0;flex:1;background:#061a2b;color:white;border:1px solid #087d96;border-radius:24px;padding:14px;outline:none}
+button{background:transparent;border:1px solid var(--cyan);color:var(--cyan);border-radius:24px;padding:12px 16px;cursor:pointer}
+button:disabled{opacity:.5;cursor:wait}
+button:hover{background:#00eaff;color:#00121b}
+.tools{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;margin-top:12px}
+.note{text-align:center;color:#8baeb9;font-size:12px;line-height:1.5;margin:16px}
+@media(max-width:520px){.controls{flex-wrap:wrap}.controls input{flex-basis:100%}.controls button{flex:1}.orb{width:140px;height:140px}.core{width:55px;height:55px}}
+</style>
+</head>
+<body>
+<header>J.A.R.V.I.S</header>
+<div id="clock"></div>
+<main>
+  <section class="hud"><div class="orb"><div class="core"></div></div></section>
+  <div id="status">AI SYSTEM READY</div>
+  <section id="chat" aria-live="polite">
+    <div class="msg assistant">Hello! I am JARVIS. Ask me anything.</div>
+  </section>
+  <div class="controls">
+    <input id="prompt" placeholder="Message JARVIS..." autocomplete="off">
+    <button id="send">SEND</button>
+    <button id="mic" title="Voice input">🎙</button>
+  </div>
+  <div class="tools">
+    <button onclick="openSite('https://www.google.com')">Google</button>
+    <button onclick="openSite('https://www.youtube.com')">YouTube</button>
+    <button onclick="clearChat()">Clear chat</button>
+    <button onclick="toggleVoice()" id="voiceToggle">Voice: ON</button>
+  </div>
+  <p class="note">AI replies require the local Node.js server and your own API key. Your API key stays on the server, not in this page. Voice recognition depends on browser support.</p>
+</main>
+<script>
+const chatEl=document.getElementById('chat'), promptEl=document.getElementById('prompt');
+const statusEl=document.getElementById('status');
+let history=[], voiceOn=true, busy=false;
+function clock(){document.getElementById('clock').textContent=new Date().toLocaleString()}
+setInterval(clock,1000);clock();
+function addMessage(role,text){
+ const div=document.createElement('div');div.className='msg '+role;div.textContent=text;
+ chatEl.appendChild(div);chatEl.scrollTop=chatEl.scrollHeight;
+}
+function say(text){
+ if(!voiceOn||!('speechSynthesis'in window))return;
+ speechSynthesis.cancel();
+ const u=new SpeechSynthesisUtterance(text);
+ u.lang='en-IN';u.rate=1; speechSynthesis.speak(u);
+}
+async function sendMessage(){
+ const text=promptEl.value.trim();if(!text||busy)return;
+ promptEl.value='';addMessage('user',text);
+ history.push({role:'user',content:text});
+ busy=true;document.getElementById('send').disabled=true;statusEl.textContent='JARVIS IS THINKING...';
+ try{
+   const res=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({messages:history.slice(-16)})});
+   const data=await res.json();
+   if(!res.ok)throw new Error(data.error||'Request failed');
+   const answer=data.reply||'I could not generate a reply.';
+   history.push({role:'assistant',content:answer});addMessage('assistant',answer);say(answer);
+   statusEl.textContent='AI SYSTEM READY';
+ }catch(err){
+   history.pop();addMessage('assistant','Connection error: '+err.message+'\nCheck that the JARVIS server is running and the API key is configured.');
+   statusEl.textContent='CONNECTION ERROR';
+ }finally{busy=false;document.getElementById('send').disabled=false;promptEl.focus()}
+}
+document.getElementById('send').addEventListener('click',sendMessage);
+promptEl.addEventListener('keydown',e=>{if(e.key==='Enter')sendMessage()});
+function openSite(url){window.open(url,'_blank','noopener')}
+function clearChat(){history=[];chatEl.innerHTML='';addMessage('assistant','Chat cleared. How can I help?');}
+function toggleVoice(){voiceOn=!voiceOn;document.getElementById('voiceToggle').textContent='Voice: '+(voiceOn?'ON':'OFF');if(!voiceOn)speechSynthesis.cancel()}
+document.getElementById('mic').addEventListener('click',()=>{
+ const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+ if(!SR){addMessage('assistant','Voice recognition is not supported in this browser. You can type instead.');return}
+ const rec=new SR();rec.lang='en-IN';rec.interimResults=false;
+ statusEl.textContent='LISTENING...';
+ rec.onresult=e=>{promptEl.value=e.results[0][0].transcript;sendMessage()};
+ rec.onerror=()=>statusEl.textContent='VOICE INPUT ERROR';
+ rec.onend=()=>{if(statusEl.textContent==='LISTENING...')statusEl.textContent='AI SYSTEM READY'};
+ rec.start();
+});
+</script>
+</body>
+</html>
